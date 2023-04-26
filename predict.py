@@ -15,9 +15,9 @@ from transformers import (
     StoppingCriteriaList,
 )
 
+from config import DEFAULT_MODEL_NAME
 from subclass import YieldingCausalLM
 
-DEFAULT_MODEL = "stabilityai/stablelm-tuned-alpha-7b"
 CACHE_DIR = "pretrained_weights"
 TOKENIZER_PATH = "./tokenizer"
 
@@ -95,7 +95,7 @@ class Predictor(BasePredictor):
     def load_tensorizer(self, weights):
         st = time.time()
         print(f"deserializing weights from {weights}")
-        config = AutoConfig.from_pretrained(DEFAULT_MODEL)
+        config = AutoConfig.from_pretrained(DEFAULT_MODEL_NAME)
 
         model = no_init_or_tensor(
             lambda: YieldingCausalLM.from_pretrained(

@@ -1,7 +1,6 @@
 import argparse
 import copy
 import json
-import os
 
 import torch
 from cog import Input, Path
@@ -265,8 +264,8 @@ def train(
             learning_rate=learning_rate,
             deepspeed=deepspeed,
             max_steps=max_steps,
-            # tf32=True,
-            # bf16=True,
+            tf32=True,
+            bf16=True,
             half_precision_backend="cuda_amp",
             local_rank=local_rank,
         ),
