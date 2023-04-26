@@ -1,3 +1,4 @@
+import os
 import subprocess
 import time
 from collections import OrderedDict
@@ -53,12 +54,12 @@ class Predictor(BasePredictor):
     def setup(self, weights: Optional[Path] = None):
         if weights is not None and weights.name == "weights":
             weights = None
+
         if weights is None and TENSORIZER_WEIGHTS_PATH:
             print("Loading tensorized weights from public path")
             self.model = self.load_tensorizer(
                 weights=maybe_download(TENSORIZER_WEIGHTS_PATH)
             )
-
         elif (hasattr(weights, "filename") and "tensors" in weights.filename) or str(
             weights
         ).endswith(".tensors"):
@@ -69,9 +70,22 @@ class Predictor(BasePredictor):
         self.tokenizer = AutoTokenizer.from_pretrained(TOKENIZER_PATH)
         self.stop = StopOnTokens()
 
-    def load_huggingface_model(self, weights=None):
+    def load_huggingface_model(self, weights):
         st = time.time()
         print(f"loading weights from {weights} w/o tensorizer")
+
+        # first see if it's a remote path
+        weights = maybe_download(weights)
+        # next, if it's a zip we have to unzip it
+        if weights.endswith(".zip"):
+            import zipfile
+
+            weights = zipfile.ZipFile(weights, "r")
+            # munge filename four output directory
+            output_dir = os.path.basename(weights.filename).replace(".zip", "")
+            weights.extractall(f"{CACHE_DIR}/{output_dir}")
+            weights = f"{CACHE_DIR}/{output_dir}"
+
         model = YieldingCausalLM.from_pretrained(weights, cache_dir=CACHE_DIR).to(
             "cuda:0"
         )
