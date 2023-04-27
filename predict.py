@@ -6,6 +6,7 @@ from typing import Optional
 
 import torch
 from cog import BasePredictor, Input, Path
+from peft import PeftModel
 from tensorizer import TensorDeserializer
 from tensorizer.utils import no_init_or_tensor
 from transformers import (
@@ -48,45 +49,28 @@ def maybe_download(path):
 
 
 class Predictor(BasePredictor):
+
+    # NB: change from the old version: weights now refers to the fine-tuned adaptor weights, and not the underlying model weights
     def setup(self, weights: Optional[Path] = None):
-        if weights is not None and weights.name == "weights":
-            weights = None
-
-        if weights is None:
-            weights = "tuned_weights.zip"
-
-        if weights is None and TENSORIZER_WEIGHTS_PATH:
+        try:
             print("Loading tensorized weights from public path")
             self.model = self.load_tensorizer(
                 weights=maybe_download(TENSORIZER_WEIGHTS_PATH)
             )
-        elif (hasattr(weights, "filename") and "tensors" in weights.filename) or str(
-            weights
-        ).endswith(".tensors"):
-            self.model = self.load_tensorizer(weights)
-        else:
-            self.model = self.load_huggingface_model(weights=weights)
+        except:
+            print("Loading via hf")
+            self.model = self.load_huggingface_model()
 
         self.tokenizer = load_tokenizer()
-        self.stop = StopOnTokens()
 
-    def load_huggingface_model(self, weights):
+        if weights is not None:
+            self.model = self.load_fine_tuned(self.model, weights=weights)
+
+    def load_huggingface_model(self):
         st = time.time()
-        print(f"loading weights from {weights} w/o tensorizer")
+        print(f"loading weights w/o tensorizer")
 
-        # first see if it's a remote path
-        weights = maybe_download(weights)
-        # next, if it's a zip we have to unzip it
-        if weights.endswith(".zip"):
-            import zipfile
-
-            weights = zipfile.ZipFile(weights, "r")
-            # munge filename four output directory
-            output_dir = os.path.basename(weights.filename).replace(".zip", "")
-            weights.extractall(f"{CACHE_DIR}/{output_dir}")
-            weights = f"{CACHE_DIR}/{output_dir}"
-
-        model = AutoModelForCausalLM.from_pretrained(weights, cache_dir=CACHE_DIR).to("cuda:0")
+        model = AutoModelForCausalLM.from_pretrained(DEFAULT_MODEL_NAME, cache_dir=CACHE_DIR).to("cuda:0")
         print(f"weights loaded in {time.time() - st}")
         return model
 
@@ -102,6 +86,25 @@ class Predictor(BasePredictor):
         )
         des = TensorDeserializer(weights, plaid_mode=True)
         des.load_into_module(model)
+        print(f"weights loaded in {time.time() - st}")
+        return model
+
+    def load_fine_tuned(self, model, weights):
+        """Load fine-tuned adaptor weights using PEFT."""
+        st = time.time()
+        print(f"loading fine-tuned weights from {weights}")
+
+        weights = str(weights)
+
+        if weights.endswith(".zip"):
+            import zipfile
+            weights = zipfile.ZipFile(weights, "r")
+            # munge filename four output directory
+            output_dir = os.path.basename(weights.filename).replace(".zip", "")
+            weights.extractall(f"{CACHE_DIR}/{output_dir}")
+            weights = f"./{CACHE_DIR}/{output_dir}"
+
+        model = PeftModel.from_pretrained(model, weights, cache_dir=CACHE_DIR).to("cuda:0")
         print(f"weights loaded in {time.time() - st}")
         return model
 

@@ -10,7 +10,6 @@ from transformers import Trainer, TrainingArguments, AutoModelForCausalLM
 
 from config import DEFAULT_MODEL_NAME, load_model, load_tokenizer
 
-MODEL_OUT = "/src/tuned_weights.tensors"
 CHECKPOINT_DIR = "checkpoints"
 SAVE_STRATEGY = "epoch"
 DIST_OUT_DIR = "tmp/model"
@@ -155,30 +154,6 @@ def load_json(path):
     return data
 
 
-def load_peft_model(
-    model_name_or_path, lora_rank: int, lora_alpha: int, lora_dropout: float
-):
-    if model_name_or_path is None:
-        model_name_or_path = DEFAULT_MODEL_NAME
-    model = AutoModelForCausalLM.from_pretrained(
-        model_name_or_path,
-        cache_dir="pretrained_weights",
-        torch_dtype=torch.float16,
-        load_in_8bit=True,
-        device_map="auto",
-    )
-    model = prepare_model_for_int8_training(model)
-    config = LoraConfig(
-        r=lora_rank,
-        lora_alpha=lora_alpha,
-        lora_dropout=lora_dropout,
-        bias="none",
-        task_type=TaskType.SEQ_2_SEQ_LM,
-    )
-    model = get_peft_model(model, config)
-    return model
-
-
 def train(
     train_data: Path = Input(
         description="path to data file to use for fine-tuning your model"
@@ -236,6 +211,12 @@ def train(
 
     model.resize_token_embeddings(len(tokenizer))
 
+    # TODO: make configurable
+    peft_config = LoraConfig(task_type=TaskType.CAUSAL_LM, inference_mode=False, r=8, lora_alpha=32, lora_dropout=0.1)
+    
+    model = get_peft_model(model, peft_config)
+    model.print_trainable_parameters()
+
     print(f"Loading dataset {train_data}...")
     print(train_data)
     train_data = load_data(train_data)
@@ -272,7 +253,8 @@ def train(
         data_collator=SequenceDataCollator(tokenizer, 8),  # depends on bf16 value
     )
     trainer.train()
-    trainer.save_model(output_dir=local_output_dir)
+    # trainer.save_model(output_dir=local_output_dir)
+    trainer.model.save_pretrained(local_output_dir)
     return
 
 
