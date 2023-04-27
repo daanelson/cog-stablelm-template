@@ -1,12 +1,10 @@
 import argparse
 import os
 from subprocess import call
-import logging
 
 import torch
 from cog import BaseModel, Input, Path
 import zipfile
-from tensorizer import TensorSerializer
 
 MODEL_OUT = "/src/tuned_weights.zip"
 CHECKPOINT_DIR = "checkpoints"
@@ -113,11 +111,6 @@ def train(
                 )
 
     print("done")
-
-
-    # serializer = TensorSerializer(MODEL_OUT)
-    # serializer.write_module(model)
-    # serializer.close()
 
     return TrainingOutput(weights=Path(MODEL_OUT))
 
