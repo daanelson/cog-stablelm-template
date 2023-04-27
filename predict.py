@@ -5,18 +5,16 @@ from collections import OrderedDict
 from typing import Optional
 
 import torch
-from cog import BasePredictor, Input, Path, ConcatenateIterator
+from cog import BasePredictor, Input, Path
 from tensorizer import TensorDeserializer
 from tensorizer.utils import no_init_or_tensor
 from transformers import (
     AutoConfig,
-    AutoTokenizer,
     StoppingCriteria,
-    StoppingCriteriaList,
+    StoppingCriteriaList, AutoModelForCausalLM,
 )
 
 from config import DEFAULT_MODEL_NAME, load_tokenizer
-from subclass import YieldingCausalLM
 
 CACHE_DIR = "pretrained_weights"
 
@@ -88,9 +86,6 @@ class Predictor(BasePredictor):
             weights.extractall(f"{CACHE_DIR}/{output_dir}")
             weights = f"{CACHE_DIR}/{output_dir}"
 
-        #model = YieldingCausalLM.from_pretrained(weights, cache_dir=CACHE_DIR).to(
-            #"cuda:0"
-        #)
         model = AutoModelForCausalLM.from_pretrained(weights, cache_dir=CACHE_DIR).to("cuda:0")
         print(f"weights loaded in {time.time() - st}")
         return model
@@ -101,7 +96,7 @@ class Predictor(BasePredictor):
         config = AutoConfig.from_pretrained(DEFAULT_MODEL_NAME)
 
         model = no_init_or_tensor(
-            lambda: YieldingCausalLM.from_pretrained(
+            lambda: AutoModelForCausalLM.from_pretrained(
                 None, config=config, state_dict=OrderedDict()
             )
         )
@@ -138,7 +133,7 @@ class Predictor(BasePredictor):
             le=5,
             default=1.2,
         ),
-    ) -> ConcatenateIterator[str]:
+    ) -> str:
 
         prompt_text = f"{SYSTEM_PROMPT}<|USER|>{prompt}<|ASSISTANT|>"
 
@@ -146,9 +141,7 @@ class Predictor(BasePredictor):
             "cuda:0"
         )
         with torch.inference_mode():
-            first_token_yielded = False
-            prev_ids = []
-            for output in self.model.generate(
+            output = self.model.generate(
                 input_ids,
                 max_new_tokens=max_tokens,
                 do_sample=True,
@@ -158,34 +151,51 @@ class Predictor(BasePredictor):
                 top_p=top_p,
                 repetition_penalty=repetition_penalty,
                 stopping_criteria=StoppingCriteriaList([self.stop]),
-            ):
-                cur_id = output.item()
-                # in order to properly handle spaces, we need to do our own tokenizing. Fun!
-                # we're building up a buffer of sub-word / punctuation tokens until we hit a space, and then yielding whole words + punctuation.
-                cur_token = self.tokenizer.convert_ids_to_tokens(cur_id)
+            )
 
-                # skip initial newline, which this almost always yields. hack - newline id = 187.
-                if not first_token_yielded and not prev_ids and cur_id == 187:
-                    continue
-
-                # Space is represented as "Ġ".
-                # Yield previous IDs if we hit a space
-                # or if the current token includes a space
-                # at its start (e.g. ' is' -> 'Ġis')
-                if cur_token.startswith("Ġ"):
-                    if prev_ids:
-                        yield self.tokenizer.decode(prev_ids)
-                        prev_ids = []
-
-                    prev_ids = [cur_id]
-                    continue
-
-                # End token
-                if cur_token == "<|endoftext|>":
-                    break
-
-                prev_ids.append(cur_id)
-
-            if prev_ids:
-                yield self.tokenizer.decode(prev_ids)
-                prev_ids = []
+            # detokenize
+            output = self.tokenizer.decode(output[0], skip_special_tokens=True)
+            return output
+        #     first_token_yielded = False
+        #     prev_ids = []
+        #     for output in self.model.generate(
+        #         input_ids,
+        #         max_new_tokens=max_tokens,
+        #         do_sample=True,
+        #         num_return_sequences=1,
+        #         num_beams=1,
+        #         temperature=temperature,
+        #         top_p=top_p,
+        #         repetition_penalty=repetition_penalty,
+        #         stopping_criteria=StoppingCriteriaList([self.stop]),
+        #     ):
+        #         cur_id = output.item()
+        #         # in order to properly handle spaces, we need to do our own tokenizing. Fun!
+        #         # we're building up a buffer of sub-word / punctuation tokens until we hit a space, and then yielding whole words + punctuation.
+        #         cur_token = self.tokenizer.convert_ids_to_tokens(cur_id)
+        #
+        #         # skip initial newline, which this almost always yields. hack - newline id = 187.
+        #         if not first_token_yielded and not prev_ids and cur_id == 187:
+        #             continue
+        #
+        #         # Space is represented as "Ġ".
+        #         # Yield previous IDs if we hit a space
+        #         # or if the current token includes a space
+        #         # at its start (e.g. ' is' -> 'Ġis')
+        #         if cur_token.startswith("Ġ"):
+        #             if prev_ids:
+        #                 yield self.tokenizer.decode(prev_ids)
+        #                 prev_ids = []
+        #
+        #             prev_ids = [cur_id]
+        #             continue
+        #
+        #         # End token
+        #         if cur_token == "<|endoftext|>":
+        #             break
+        #
+        #         prev_ids.append(cur_id)
+        #
+        #     if prev_ids:
+        #         yield self.tokenizer.decode(prev_ids)
+        #         prev_ids = []
