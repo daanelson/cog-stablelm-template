@@ -51,7 +51,7 @@ def train(
 ) -> TrainingOutput:
 
     root_path = os.getcwd()
-    deepspeed_config = os.path.join(root_path, "ds_config/ds_z3_bf16_config.json")
+    deepspeed_config = os.path.join(root_path, "ds_config/ds_z1_bf16_config.json")
 
     output_dir = DIST_OUT_DIR
     os.makedirs(output_dir, exist_ok=True)
