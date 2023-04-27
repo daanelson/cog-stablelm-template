@@ -10,7 +10,7 @@ from tensorizer.utils import no_init_or_tensor
 from transformers import AutoModelForCausalLM, AutoTokenizer, AutoConfig
 
 DEFAULT_MODEL_NAME = "StabilityAI/stablelm-base-alpha-3b"  # path from which we pull weights when there's no COG_WEIGHTS environment variable
-# DEFAULT_MODEL_NAME = "distilgpt2"
+#DEFAULT_MODEL_NAME = "distilgpt2"
 TOKENIZER_NAME = DEFAULT_MODEL_NAME
 CONFIG_LOCATION = DEFAULT_MODEL_NAME
 

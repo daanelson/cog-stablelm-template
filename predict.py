@@ -15,11 +15,10 @@ from transformers import (
     StoppingCriteriaList,
 )
 
-from config import DEFAULT_MODEL_NAME
+from config import DEFAULT_MODEL_NAME, load_tokenizer
 from subclass import YieldingCausalLM
 
 CACHE_DIR = "pretrained_weights"
-TOKENIZER_PATH = "./tokenizer"
 
 TENSORIZER_WEIGHTS_PATH = "gs://replicate-weights/stablelm-tuned-alpha-7b.tensors"
 
@@ -55,6 +54,9 @@ class Predictor(BasePredictor):
         if weights is not None and weights.name == "weights":
             weights = None
 
+        if weights is None:
+            weights = "tuned_weights.zip"
+
         if weights is None and TENSORIZER_WEIGHTS_PATH:
             print("Loading tensorized weights from public path")
             self.model = self.load_tensorizer(
@@ -67,7 +69,7 @@ class Predictor(BasePredictor):
         else:
             self.model = self.load_huggingface_model(weights=weights)
 
-        self.tokenizer = AutoTokenizer.from_pretrained(TOKENIZER_PATH)
+        self.tokenizer = load_tokenizer()
         self.stop = StopOnTokens()
 
     def load_huggingface_model(self, weights):
@@ -86,9 +88,10 @@ class Predictor(BasePredictor):
             weights.extractall(f"{CACHE_DIR}/{output_dir}")
             weights = f"{CACHE_DIR}/{output_dir}"
 
-        model = YieldingCausalLM.from_pretrained(weights, cache_dir=CACHE_DIR).to(
-            "cuda:0"
-        )
+        #model = YieldingCausalLM.from_pretrained(weights, cache_dir=CACHE_DIR).to(
+            #"cuda:0"
+        #)
+        model = AutoModelForCausalLM.from_pretrained(weights, cache_dir=CACHE_DIR).to("cuda:0")
         print(f"weights loaded in {time.time() - st}")
         return model
 

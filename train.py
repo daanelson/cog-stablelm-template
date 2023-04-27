@@ -101,6 +101,8 @@ def train(
     if os.path.exists(MODEL_OUT):
         os.remove(MODEL_OUT)
 
+    print(f"packing outputs to {MODEL_OUT}")
+
     # no sense compressing
     with zipfile.ZipFile(MODEL_OUT, "w", zipfile.ZIP_STORED) as zipf:
         for root, dirs, files in os.walk(DIST_OUT_DIR):
@@ -109,6 +111,8 @@ def train(
                     os.path.join(root, file),
                     os.path.relpath(os.path.join(root, file), DIST_OUT_DIR),
                 )
+
+    print("done")
 
 
     # serializer = TensorSerializer(MODEL_OUT)
