@@ -21,12 +21,7 @@ CACHE_DIR = "pretrained_weights"
 
 TENSORIZER_WEIGHTS_PATH = "gs://replicate-weights/stablelm-tuned-alpha-7b.tensors"
 
-SYSTEM_PROMPT = """<|SYSTEM|># StableLM Tuned (Alpha version)
-- StableLM is a helpful and harmless open-source AI language model developed by StabilityAI.
-- StableLM is excited to be able to help the user, but will refuse to do anything that could be considered harmful to the user.
-- StableLM is more than just an information source, StableLM is also able to write poetry, short stories, and make jokes.
-- StableLM will refuse to participate in anything that could harm a human.
-"""
+SYSTEM_PROMPT = """"""
 
 
 class StopOnTokens(StoppingCriteria):
@@ -52,7 +47,9 @@ class Predictor(BasePredictor):
 
     # NB: change from the old version: weights now refers to the fine-tuned adaptor weights, and not the underlying model weights
     def setup(self, weights: Optional[Path] = None):
+        weights="tuned_weights.zip"
         try:
+            raise Exception()
             print("Loading tensorized weights from public path")
             self.model = self.load_tensorizer(
                 weights=maybe_download(TENSORIZER_WEIGHTS_PATH)
@@ -65,6 +62,8 @@ class Predictor(BasePredictor):
 
         if weights is not None:
             self.model = self.load_fine_tuned(self.model, weights=weights)
+
+        self.stop = StopOnTokens()
 
     def load_huggingface_model(self):
         st = time.time()
@@ -138,14 +137,14 @@ class Predictor(BasePredictor):
         ),
     ) -> str:
 
-        prompt_text = f"{SYSTEM_PROMPT}<|USER|>{prompt}<|ASSISTANT|>"
+        prompt_text = prompt
 
         input_ids = self.tokenizer(prompt_text, return_tensors="pt").input_ids.to(
             "cuda:0"
         )
         with torch.inference_mode():
             output = self.model.generate(
-                input_ids,
+                input_ids=input_ids,
                 max_new_tokens=max_tokens,
                 do_sample=True,
                 num_return_sequences=1,
