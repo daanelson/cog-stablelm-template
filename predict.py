@@ -47,9 +47,7 @@ class Predictor(BasePredictor):
 
     # NB: change from the old version: weights now refers to the fine-tuned adaptor weights, and not the underlying model weights
     def setup(self, weights: Optional[Path] = None):
-        weights="tuned_weights.zip"
         try:
-            raise Exception()
             print("Loading tensorized weights from public path")
             self.model = self.load_tensorizer(
                 weights=maybe_download(TENSORIZER_WEIGHTS_PATH)
