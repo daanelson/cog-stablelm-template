@@ -203,16 +203,21 @@ def train(
     local_output_dir: str = None,
     deepspeed: str = None,
     local_rank: int = -1,
+    lora_rank: int = 8,
+    lora_alpha: int = 16,
+    lora_dropout: float = 0.1,
+    lora_target_modules: str = 'q_proj,v_proj'
 ) -> None:
     print("Loading model...")
 
-    model = load_model()
+    # issue w/multi-gpu downloads in tensorizer
+    torch.cuda.set_device(int(os.environ['RANK']))
+    model = load_model(plaid_mode=False, cls=AutoModelForCausalLM)
     tokenizer = load_tokenizer()
 
     model.resize_token_embeddings(len(tokenizer))
 
-    # TODO: make configurable
-    peft_config = LoraConfig(task_type=TaskType.CAUSAL_LM, inference_mode=False, r=8, lora_alpha=32, lora_dropout=0.1)
+    peft_config = LoraConfig(task_type=TaskType.CAUSAL_LM, inference_mode=False, r=lora_rank, lora_alpha=lora_alpha, lora_dropout=lora_dropout, target_modules=lora_target_modules.split(","))
     
     model = get_peft_model(model, peft_config)
     model.print_trainable_parameters()
@@ -246,14 +251,13 @@ def train(
             deepspeed=deepspeed,
             max_steps=max_steps,
             tf32=True,
-            bf16=True,
+            fp16=True,
             half_precision_backend="cuda_amp",
             local_rank=local_rank,
         ),
         data_collator=SequenceDataCollator(tokenizer, 8),  # depends on bf16 value
     )
     trainer.train()
-    # trainer.save_model(output_dir=local_output_dir)
     trainer.model.save_pretrained(local_output_dir)
     return
 
@@ -272,12 +276,6 @@ if __name__ == "__main__":
         help="Path to the json dataset",
         default=None,
     )
-    # parser.add_argument(
-    #     "--weights",
-    #     type=str,
-    #     default=None,
-    #     help="The model class to fine-tune on HF or as a local path (e.g. 'google/flan-t5-xxl'",
-    # )
     parser.add_argument(
         "--num_train_epochs", type=int, help="Number of training epochs", default=1
     )
@@ -329,33 +327,30 @@ if __name__ == "__main__":
         default=-1,
         help="Provided by deepspeed to identify which instance this process is when performing multi-GPU training.",
     )
+    parser.add_argument(
+        "--lora_rank",
+        type=int,
+        default=8,
+        help="Number of training steps to run, overrides num_train_epochs, useful for testing",
+    )
+    parser.add_argument(
+        "--lora_alpha",
+        type=int,
+        default=16,
+        help="Number of training steps to run, overrides num_train_epochs, useful for testing",
+    )
+    parser.add_argument(
+        "--lora_dropout",
+        type=float,
+        default=0.4,
+        help="Number of training steps to run, overrides num_train_epochs, useful for testing",
+    )
+    parser.add_argument(
+        "--lora_target_modules",
+        type=str, 
+        default=None,
+        help="Comma-separated list of lora modules to target, i.e. 'q_proj,v_proj'. Leave blank for default"
+    )
     some_args = parser.parse_args()
     train(**vars(some_args))
 
-    # parser.add_argument(
-    #     "--local_rank",
-    #     type=int,
-    #     default=0
-    # )
-    # parser.add_argument(
-    #     "--peft",
-    #     action="store_true"
-    # )
-    # parser.add_argument(
-    #     "--lora_rank",
-    #     type=int,
-    #     default=16,
-    #     help="Number of training steps to run, overrides num_train_epochs, useful for testing",
-    # )
-    # parser.add_argument(
-    #     "--lora_alpha",
-    #     type=int,
-    #     default=16,
-    #     help="Number of training steps to run, overrides num_train_epochs, useful for testing",
-    # )
-    # parser.add_argument(
-    #     "--lora_dropout",
-    #     type=float,
-    #     default=0.4,
-    #     help="Number of training steps to run, overrides num_train_epochs, useful for testing",
-    # )

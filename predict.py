@@ -16,7 +16,7 @@ from transformers import (
 )
 from subclass import YieldingCausalLM
 
-from config import load_tokenizer, load_model, SYSTEM_PROMPT 
+from config import load_tokenizer, load_model, format_prompt 
 
 CACHE_DIR = "pretrained_weights"
 
@@ -93,7 +93,7 @@ class Predictor(BasePredictor):
         ),
     ) -> str:
 
-        prompt_text = prompt
+        prompt_text = format_prompt(prompt)
 
         input_ids = self.tokenizer(prompt_text, return_tensors="pt").input_ids.to(
             "cuda:0"

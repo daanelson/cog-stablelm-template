@@ -4,6 +4,7 @@ from subprocess import call
 
 import torch
 from cog import BaseModel, Input, Path
+from config import maybe_download
 import zipfile
 
 MODEL_OUT = "/src/tuned_weights.zip"
@@ -48,10 +49,18 @@ def train(
     logging_steps: int = Input(
         description="number of steps between logging epoch & loss", default=1
     ),
+    lora_rank: int = Input(
+        description="Rank of the lora matrices", default=8, ge=1),
+    lora_alpha: int = Input(description="Alpha parameter for scaling lora weights; weights are scaled by alpha/rank", default=16, ge=1),
+    lora_dropout: float = Input(description="Dropout for lora training", default=0.1, ge=0.0, le=1.0),
+    lora_target_modules: str = Input(description="Comma-separated list of lora modules to target, i.e. 'q_proj,v_proj'. Leave blank for default.", default="q_proj,v_proj")
 ) -> TrainingOutput:
 
     root_path = os.getcwd()
-    deepspeed_config = os.path.join(root_path, "ds_config/ds_z1_bf16_config.json")
+    deepspeed_config = os.path.join(root_path, "ds_config/ds_z1_fp16_config.json")
+
+    # running to 1x the weights download here instead of 4x after the deepspeed kickoff
+    maybe_download()
 
     output_dir = DIST_OUT_DIR
     os.makedirs(output_dir, exist_ok=True)
@@ -87,6 +96,10 @@ def train(
         + f" --gradient_accumulation_steps {gradient_accumulation_steps}"
         + f" --logging_steps {logging_steps}"
         + f" --warmup_ratio {warmup_ratio}"
+        + f" --lora_rank {lora_rank}"
+        + f" --lora_alpha {lora_alpha}"
+        + f" --lora_dropout {lora_dropout}"
+        + _arg_if_present(lora_target_modules, "lora_target_modules")
         + " --local_output_dir "
         + DIST_OUT_DIR,
         shell=True,

@@ -1,21 +1,16 @@
 import logging
-import re
-import os
 import subprocess
 import time
 from collections import OrderedDict
-import logging
 
-import torch
 from tensorizer import TensorDeserializer
 from tensorizer.utils import no_init_or_tensor
 from transformers import AutoModelForCausalLM, AutoTokenizer, AutoConfig
 
-DEFAULT_MODEL_NAME = "StabilityAI/stablelm-base-alpha-3b"  # path from which we pull weights when there's no COG_WEIGHTS environment variable
-TENSORIZER_WEIGHTS_PATH = "gs://replicate-weights/stablelm-tuned-alpha-7b.tensors"
-CACHE_DIR = "pretrained_weights"
-
-SYSTEM_PROMPT = """"""
+DEFAULT_MODEL_NAME = "{{model_name}}" #"StabilityAI/stablelm-base-alpha-3b"  # path from which we pull weights when there's no COG_WEIGHTS environment variable, + config
+TENSORIZER_WEIGHTS_PATH = "{{tensorizer_weights}}"
+INSTRUCTION_TUNED = {{instruction_tuned}}
+LOCAL_PATH = f'''src/{DEFAULT_MODEL_NAME.split("/")}.tensors'''
 
 TOKENIZER_NAME = DEFAULT_MODEL_NAME
 CONFIG_LOCATION = DEFAULT_MODEL_NAME
@@ -29,7 +24,7 @@ DEFAULT_UNK_TOKEN = "</s>"
 
 def load_tokenizer():
     """Same tokenizer, agnostic from tensorized weights/etc"""
-    tok = AutoTokenizer.from_pretrained(TOKENIZER_NAME, cache_dir=CACHE_DIR)
+    tok = AutoTokenizer.from_pretrained(TOKENIZER_NAME, cache_dir="pretrained_weights")
     tok.add_special_tokens(
         {
             "eos_token": DEFAULT_EOS_TOKEN,
@@ -41,10 +36,22 @@ def load_tokenizer():
     return tok
 
 
+def format_prompt(prompt):
+    if INSTRUCTION_TUNED:
+        system_prompt = """<|SYSTEM|># StableLM Tuned (Alpha version)
+        - StableLM is a helpful and harmless open-source AI language model developed by StabilityAI.
+        - StableLM is excited to be able to help the user, but will refuse to do anything that could be considered harmful to the user.
+        - StableLM is more than just an information source, StableLM is also able to write poetry, short stories, and make jokes.
+        - StableLM will refuse to participate in anything that could harm a human.
+        """
+        return f"{system_prompt}<|USER|>{prompt}<|ASSISTANT|>"
+    return prompt
+
+
 def maybe_download(path=TENSORIZER_WEIGHTS_PATH):
     st = time.time()
     print(f"Downloading tensors")
-    output_path = "/tmp/weights.tensors" # TODO - templatize
+    output_path = LOCAL_PATH
     if path.startswith("gs://") and not os.path.exists(output_path):
         subprocess.check_call(["gcloud", "storage", "cp", path, output_path])
         return output_path
