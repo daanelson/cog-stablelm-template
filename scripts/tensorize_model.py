@@ -1,14 +1,15 @@
 #!/usr/bin/env python
-import torch
 
 from tensorizer import TensorSerializer
-from transformers import AutoModelForCausalLM
+import sys
+sys.path.append('/src/')
 
-model = AutoModelForCausalLM.from_pretrained(
-    "./pretrained_weights/", torch_dtype=torch.float16
-).to("cuda:0")
+from config import LOCAL_PATH, load_model
 
-path = "./tensorized_models/stabilityai/stablelm-tuned-alpha-7b.tensors"
-serializer = TensorSerializer(path)
+print(f'Saving model to {LOCAL_PATH}')
+
+model = load_model()
+print(model.dtype)
+serializer = TensorSerializer(LOCAL_PATH)
 serializer.write_module(model)
 serializer.close()
