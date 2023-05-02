@@ -1,0 +1,4 @@
+pretrained_weights/**
+tmp/**
+**.tensors
+
