@@ -2,6 +2,7 @@ import logging
 import subprocess
 import time
 from collections import OrderedDict
+import os
 
 from tensorizer import TensorDeserializer
 from tensorizer.utils import no_init_or_tensor
@@ -10,10 +11,11 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, AutoConfig
 DEFAULT_MODEL_NAME = "{{model_name}}" #"StabilityAI/stablelm-base-alpha-3b"  # path from which we pull weights when there's no COG_WEIGHTS environment variable, + config
 TENSORIZER_WEIGHTS_PATH = "{{tensorizer_weights}}"
 INSTRUCTION_TUNED = {{instruction_tuned}}
-LOCAL_PATH = f'''src/{DEFAULT_MODEL_NAME.split("/")}.tensors'''
+LOCAL_PATH = f'''/src/{DEFAULT_MODEL_NAME.split("/")[-1].replace("-", "_")}.tensors'''
 
-TOKENIZER_NAME = DEFAULT_MODEL_NAME
+TOKENIZER_PATH = DEFAULT_MODEL_NAME
 CONFIG_LOCATION = DEFAULT_MODEL_NAME
+CACHE_DIR = "pretrained_weights"
 
 
 DEFAULT_PAD_TOKEN = "[PAD]"
@@ -24,7 +26,7 @@ DEFAULT_UNK_TOKEN = "</s>"
 
 def load_tokenizer():
     """Same tokenizer, agnostic from tensorized weights/etc"""
-    tok = AutoTokenizer.from_pretrained(TOKENIZER_NAME, cache_dir="pretrained_weights")
+    tok = AutoTokenizer.from_pretrained(TOKENIZER_PATH, cache_dir="pretrained_weights")
     tok.add_special_tokens(
         {
             "eos_token": DEFAULT_EOS_TOKEN,
@@ -49,13 +51,15 @@ def format_prompt(prompt):
 
 
 def maybe_download(path=TENSORIZER_WEIGHTS_PATH):
-    st = time.time()
-    print(f"Downloading tensors")
+    st = time.time()    
     output_path = LOCAL_PATH
+    print(f"Downloading tensors to {output_path}")
     if path.startswith("gs://") and not os.path.exists(output_path):
         subprocess.check_call(["gcloud", "storage", "cp", path, output_path])
+        print(f"Tensors downloaded in {time.time() - st}")
         return output_path
-    print(f"Tensors downloaded in {time.time() - st}")
+    elif os.path.exists(output_path):
+        return output_path
     return path
 
 
@@ -68,17 +72,18 @@ def load_model(plaid_mode=True, cls=AutoModelForCausalLM):
             cls=cls
         )
         return model
-    except:
-        print("Loading via hf")
-        model = load_huggingface_model()
+    except Exception as e:
+        print(f"Exception loading tensorized weights: {e}")
+        print(f"Trying to load weights via hf")
+        model = load_huggingface_model(cls)
         return model
 
 
-def load_huggingface_model():
+def load_huggingface_model(cls):
     st = time.time()
     print(f"loading weights w/o tensorizer")
 
-    model = AutoModelForCausalLM.from_pretrained(DEFAULT_MODEL_NAME, cache_dir=CACHE_DIR).to("cuda:0")
+    model = cls.from_pretrained(DEFAULT_MODEL_NAME, cache_dir=CACHE_DIR).to("cuda:0")
     print(f"weights loaded in {time.time() - st}")
     return model
 

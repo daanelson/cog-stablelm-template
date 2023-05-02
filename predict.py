@@ -5,7 +5,7 @@ from collections import OrderedDict
 from typing import Optional
 
 import torch
-from cog import BasePredictor, Input, Path
+from cog import BasePredictor, Input, Path, ConcatenateIterator
 from peft import PeftModel
 from tensorizer import TensorDeserializer
 from tensorizer.utils import no_init_or_tensor
@@ -35,6 +35,7 @@ class Predictor(BasePredictor):
 
     # NB: change from the old version: weights now refers to the fine-tuned adaptor weights, and not the underlying model weights
     def setup(self, weights: Optional[Path] = None):
+        weights = '/src/tuned_weights.zip'
         self.model = load_model(plaid_mode=True, cls=YieldingCausalLM)
 
         self.tokenizer = load_tokenizer()
@@ -91,30 +92,19 @@ class Predictor(BasePredictor):
             le=5,
             default=1.2,
         ),
-    ) -> str:
+    ) -> ConcatenateIterator[str]:
 
         prompt_text = format_prompt(prompt)
+        print(f"prompt: {prompt_text}")
 
         input_ids = self.tokenizer(prompt_text, return_tensors="pt").input_ids.to(
             "cuda:0"
         )
         with torch.inference_mode():
-            output = self.model.generate(
-                input_ids=input_ids,
-                max_new_tokens=max_tokens,
-                do_sample=True,
-                num_return_sequences=1,
-                num_beams=1,
-                temperature=temperature,
-                top_p=top_p,
-                repetition_penalty=repetition_penalty,
-                stopping_criteria=StoppingCriteriaList([self.stop]),
-            )
-
             first_token_yielded = False
             prev_ids = []
             for output in self.model.generate(
-                input_ids,
+                input_ids=input_ids,
                 max_new_tokens=max_tokens,
                 do_sample=True,
                 num_return_sequences=1,

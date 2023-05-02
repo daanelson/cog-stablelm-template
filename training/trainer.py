@@ -1,6 +1,7 @@
 import argparse
 import copy
 import json
+import os
 
 import torch
 from cog import Input, Path
@@ -217,7 +218,7 @@ def train(
 
     model.resize_token_embeddings(len(tokenizer))
 
-    peft_config = LoraConfig(task_type=TaskType.CAUSAL_LM, inference_mode=False, r=lora_rank, lora_alpha=lora_alpha, lora_dropout=lora_dropout, target_modules=lora_target_modules.split(","))
+    peft_config = LoraConfig(task_type=TaskType.CAUSAL_LM, inference_mode=False, r=lora_rank, lora_alpha=lora_alpha, lora_dropout=lora_dropout)
     
     model = get_peft_model(model, peft_config)
     model.print_trainable_parameters()

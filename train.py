@@ -53,7 +53,7 @@ def train(
         description="Rank of the lora matrices", default=8, ge=1),
     lora_alpha: int = Input(description="Alpha parameter for scaling lora weights; weights are scaled by alpha/rank", default=16, ge=1),
     lora_dropout: float = Input(description="Dropout for lora training", default=0.1, ge=0.0, le=1.0),
-    lora_target_modules: str = Input(description="Comma-separated list of lora modules to target, i.e. 'q_proj,v_proj'. Leave blank for default.", default="q_proj,v_proj")
+    lora_target_modules: str = Input(description="Comma-separated list of lora modules to target. Leave blank for default.", default="query_key_value")
 ) -> TrainingOutput:
 
     root_path = os.getcwd()
@@ -78,7 +78,7 @@ def train(
     def _arg_if_present(var, var_name):
         """Need to wrap any arguments whose default value in train() is `None`"""
         if var:
-            return f"--{var_name} {var}"
+            return f" --{var_name} {var}"
         return " "
 
     res = call(

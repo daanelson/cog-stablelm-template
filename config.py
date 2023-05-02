@@ -1,24 +1,21 @@
 import logging
-import re
-import os
 import subprocess
 import time
 from collections import OrderedDict
-import logging
+import os
 
-import torch
 from tensorizer import TensorDeserializer
 from tensorizer.utils import no_init_or_tensor
 from transformers import AutoModelForCausalLM, AutoTokenizer, AutoConfig
 
-DEFAULT_MODEL_NAME = "StabilityAI/stablelm-base-alpha-3b"  # path from which we pull weights when there's no COG_WEIGHTS environment variable
-TENSORIZER_WEIGHTS_PATH = "gs://replicate-weights/stablelm-tuned-alpha-7b.tensors"
-CACHE_DIR = "pretrained_weights"
-
-SYSTEM_PROMPT = """"""
+DEFAULT_MODEL_NAME = "StabilityAI/stablelm-base-alpha-3b" #"StabilityAI/stablelm-base-alpha-3b"  # path from which we pull weights when there's no COG_WEIGHTS environment variable, + config
+TENSORIZER_WEIGHTS_PATH = "gs://replicate-weights/stablelm-base-alpha-3b-fp16.tensors"
+INSTRUCTION_TUNED = False
+LOCAL_PATH = f'''/src/{DEFAULT_MODEL_NAME.split("/")[-1].replace("-", "_")}.tensors'''
 
 TOKENIZER_NAME = DEFAULT_MODEL_NAME
 CONFIG_LOCATION = DEFAULT_MODEL_NAME
+CACHE_DIR = "pretrained_weights"
 
 
 DEFAULT_PAD_TOKEN = "[PAD]"
@@ -29,7 +26,7 @@ DEFAULT_UNK_TOKEN = "</s>"
 
 def load_tokenizer():
     """Same tokenizer, agnostic from tensorized weights/etc"""
-    tok = AutoTokenizer.from_pretrained(TOKENIZER_NAME, cache_dir=CACHE_DIR)
+    tok = AutoTokenizer.from_pretrained(TOKENIZER_NAME, cache_dir="pretrained_weights")
     tok.add_special_tokens(
         {
             "eos_token": DEFAULT_EOS_TOKEN,
@@ -41,14 +38,28 @@ def load_tokenizer():
     return tok
 
 
+def format_prompt(prompt):
+    if INSTRUCTION_TUNED:
+        system_prompt = """<|SYSTEM|># StableLM Tuned (Alpha version)
+        - StableLM is a helpful and harmless open-source AI language model developed by StabilityAI.
+        - StableLM is excited to be able to help the user, but will refuse to do anything that could be considered harmful to the user.
+        - StableLM is more than just an information source, StableLM is also able to write poetry, short stories, and make jokes.
+        - StableLM will refuse to participate in anything that could harm a human.
+        """
+        return f"{system_prompt}<|USER|>{prompt}<|ASSISTANT|>"
+    return prompt
+
+
 def maybe_download(path=TENSORIZER_WEIGHTS_PATH):
-    st = time.time()
-    print(f"Downloading tensors")
-    output_path = "/tmp/weights.tensors" # TODO - templatize
+    st = time.time()    
+    output_path = LOCAL_PATH
+    print(f"Downloading tensors to {output_path}")
     if path.startswith("gs://") and not os.path.exists(output_path):
         subprocess.check_call(["gcloud", "storage", "cp", path, output_path])
+        print(f"Tensors downloaded in {time.time() - st}")
         return output_path
-    print(f"Tensors downloaded in {time.time() - st}")
+    elif os.path.exists(output_path):
+        return output_path
     return path
 
 
@@ -61,17 +72,18 @@ def load_model(plaid_mode=True, cls=AutoModelForCausalLM):
             cls=cls
         )
         return model
-    except:
-        print("Loading via hf")
-        model = load_huggingface_model()
+    except Exception as e:
+        print(f"Exception loading tensorized weights: {e}")
+        print(f"Loading weights via hf")
+        model = load_huggingface_model(cls)
         return model
 
 
-def load_huggingface_model():
+def load_huggingface_model(cls):
     st = time.time()
     print(f"loading weights w/o tensorizer")
 
-    model = AutoModelForCausalLM.from_pretrained(DEFAULT_MODEL_NAME, cache_dir=CACHE_DIR).to("cuda:0")
+    model = cls.from_pretrained(DEFAULT_MODEL_NAME, cache_dir=CACHE_DIR).to("cuda:0")
     print(f"weights loaded in {time.time() - st}")
     return model
 
@@ -93,4 +105,3 @@ def load_tensorizer(weights, plaid_mode=True, cls=AutoModelForCausalLM):
     des.load_into_module(model)
     print(f"weights loaded in {time.time() - st}")
     return model
-

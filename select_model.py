@@ -9,16 +9,16 @@ TRAIN_DEPENDENCIES = ["deepspeed==0.8.3","git+https://github.com/huggingface/pef
 
 CONFIGS = {
     "stablelm-base-alpha-3b": {
-        "cog_yaml_parameters": {"fine_tune":"train.py:train", "extra_deps": TRAIN_DEPENDENCIES},
-        "config_py_parameters": {"hf_model_name": "StabilityAI/stablelm-base-alpha-3b", "tensorizer_weights": "TODO", "instruction_tuned": "False"}
+        "cog_yaml_parameters": {"fine_tune":'''train: "train.py:train"''', "extra_deps": TRAIN_DEPENDENCIES},
+        "config_py_parameters": {"model_name": "StabilityAI/stablelm-base-alpha-3b", "tensorizer_weights": "gs://replicate-weights/stablelm-base-alpha-3b-fp16.tensors", "instruction_tuned": "False"}
     },
     "stablelm-base-alpha-7b": {
-        "cog_yaml_parameters": {"fine_tune":"train.py:train", "extra_deps": TRAIN_DEPENDENCIES},
-        "config_py_parameters": {"hf_model_name": "StabilityAI/stablelm-base-alpha-7b", "tensorizer_weights": "TODO", "instruction_tuned": "False"}
+        "cog_yaml_parameters": {"fine_tune":'''train: "train.py:train"''', "extra_deps": TRAIN_DEPENDENCIES},
+        "config_py_parameters": {"model_name": "StabilityAI/stablelm-base-alpha-7b", "tensorizer_weights": "TODO", "instruction_tuned": "False"}
     },
     "stablelm-tuned-alpha-7b": {
         "cog_yaml_parameters": {"fine_tune":"", "extra_deps": []},
-        "config_py_parameters": {"hf_model_name": "StabilityAI/stablelm-tuned-alpha-7b", "tensorizer_weights": "gs://replicate-weights/stablelm-tuned-alpha-7b.tensors", "instruction_tuned": "False"}
+        "config_py_parameters": {"model_name": "StabilityAI/stablelm-tuned-alpha-7b", "tensorizer_weights": "gs://replicate-weights/stablelm-tuned-alpha-7b.tensors", "instruction_tuned": "True"}
     },
 
 }
