@@ -16,7 +16,7 @@ from transformers import (
 )
 from subclass import YieldingCausalLM
 
-from config import load_tokenizer, load_model, format_prompt 
+from config import load_tokenizer, load_model, format_prompt, maybe_download 
 
 CACHE_DIR = "pretrained_weights"
 
@@ -50,6 +50,10 @@ class Predictor(BasePredictor):
         print(f"loading fine-tuned weights from {weights}")
 
         weights = str(weights)
+        if weights.startswith("https:") or weights.startswith("gs:"):
+            local_path = '/src/output_weights.zip'
+            maybe_download(weights, local_path)
+            weights = local_path
 
         if weights.endswith(".zip"):
             import zipfile

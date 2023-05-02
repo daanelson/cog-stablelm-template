@@ -1,4 +1,5 @@
 import logging
+import re
 import subprocess
 import time
 from collections import OrderedDict
@@ -26,7 +27,7 @@ DEFAULT_UNK_TOKEN = "</s>"
 
 def load_tokenizer():
     """Same tokenizer, agnostic from tensorized weights/etc"""
-    tok = AutoTokenizer.from_pretrained(TOKENIZER_PATH, cache_dir="pretrained_weights")
+    tok = AutoTokenizer.from_pretrained(TOKENIZER_PATH, cache_dir="tokenizer")
     tok.add_special_tokens(
         {
             "eos_token": DEFAULT_EOS_TOKEN,
@@ -50,13 +51,23 @@ def format_prompt(prompt):
     return prompt
 
 
-def maybe_download(path=TENSORIZER_WEIGHTS_PATH):
+def https_to_gs_path(weights):    
+    """Translates from replicate.delivery -> gs://, no-op otherwise"""
+    pattern = r'https://pbxt\.replicate\.delivery/([^/]+/[^/]+)'
+    match = re.search(pattern, weights)
+    if match:
+        weights = f"gs://replicate-files/{match.group(1)}"
+    return weights
+
+
+def maybe_download(path=TENSORIZER_WEIGHTS_PATH, output_path=LOCAL_PATH):
+    """uses gcloud storage to pull replicate.delivery or gs:// files to a local directory"""
     st = time.time()    
-    output_path = LOCAL_PATH
-    print(f"Downloading tensors to {output_path}")
+    path = https_to_gs_path(path)
+    print(f"Downloading {path} to {output_path}")
     if path.startswith("gs://") and not os.path.exists(output_path):
         subprocess.check_call(["gcloud", "storage", "cp", path, output_path])
-        print(f"Tensors downloaded in {time.time() - st}")
+        print(f"Downloaded in {time.time() - st}")
         return output_path
     elif os.path.exists(output_path):
         return output_path
@@ -64,6 +75,7 @@ def maybe_download(path=TENSORIZER_WEIGHTS_PATH):
 
 
 def load_model(plaid_mode=True, cls=AutoModelForCausalLM):
+    """Loads model into provided HF class using tensorizer first, falling back on HF"""
     try:
         print("Loading tensorized weights from public path")
         model = load_tensorizer(
