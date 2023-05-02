@@ -35,7 +35,6 @@ class Predictor(BasePredictor):
 
     # NB: change from the old version: weights now refers to the fine-tuned adaptor weights, and not the underlying model weights
     def setup(self, weights: Optional[Path] = None):
-        weights = '/src/tuned_weights.zip'
         self.model = load_model(plaid_mode=True, cls=YieldingCausalLM)
 
         self.tokenizer = load_tokenizer()

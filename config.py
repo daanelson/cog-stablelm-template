@@ -13,7 +13,7 @@ TENSORIZER_WEIGHTS_PATH = "gs://replicate-weights/stablelm-base-alpha-3b-fp16.te
 INSTRUCTION_TUNED = False
 LOCAL_PATH = f'''/src/{DEFAULT_MODEL_NAME.split("/")[-1].replace("-", "_")}.tensors'''
 
-TOKENIZER_NAME = DEFAULT_MODEL_NAME
+TOKENIZER_PATH = "/src/tokenizer"
 CONFIG_LOCATION = DEFAULT_MODEL_NAME
 CACHE_DIR = "pretrained_weights"
 
@@ -26,7 +26,7 @@ DEFAULT_UNK_TOKEN = "</s>"
 
 def load_tokenizer():
     """Same tokenizer, agnostic from tensorized weights/etc"""
-    tok = AutoTokenizer.from_pretrained(TOKENIZER_NAME, cache_dir="pretrained_weights")
+    tok = AutoTokenizer.from_pretrained(TOKENIZER_PATH)
     tok.add_special_tokens(
         {
             "eos_token": DEFAULT_EOS_TOKEN,
