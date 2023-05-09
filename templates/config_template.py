@@ -5,6 +5,8 @@ import time
 from collections import OrderedDict
 import os
 
+import torch
+
 from tensorizer import TensorDeserializer
 from tensorizer.utils import no_init_or_tensor
 from transformers import AutoModelForCausalLM, AutoTokenizer, AutoConfig
@@ -95,7 +97,7 @@ def load_huggingface_model(cls):
     st = time.time()
     print(f"loading weights w/o tensorizer")
 
-    model = cls.from_pretrained(DEFAULT_MODEL_NAME, cache_dir=CACHE_DIR).to("cuda:0")
+    model = cls.from_pretrained(DEFAULT_MODEL_NAME, torch_dtype=torch.float16, cache_dir=CACHE_DIR).to("cuda:0")
     print(f"weights loaded in {time.time() - st}")
     return model
 

@@ -14,7 +14,7 @@ CONFIGS = {
     },
     "stablelm-base-alpha-7b": {
         "cog_yaml_parameters": {"fine_tune":'''train: "train.py:train"''', "extra_deps": TRAIN_DEPENDENCIES},
-        "config_py_parameters": {"model_name": "StabilityAI/stablelm-base-alpha-7b", "tensorizer_weights": "TODO", "instruction_tuned": "False"}
+        "config_py_parameters": {"model_name": "StabilityAI/stablelm-base-alpha-7b", "tensorizer_weights": "gs://replicate-weights/stablelm-base-alpha-7b-fp16.tensors", "instruction_tuned": "False"}
     },
     "stablelm-tuned-alpha-7b": {
         "cog_yaml_parameters": {"fine_tune":"", "extra_deps": []},
