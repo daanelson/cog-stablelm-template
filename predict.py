@@ -5,7 +5,7 @@ from collections import OrderedDict
 from typing import Optional
 
 import torch
-from cog import BasePredictor, Input, Path
+from cog import BasePredictor, Input, Path, ConcatenateIterator
 from peft import PeftModel
 from tensorizer import TensorDeserializer
 from tensorizer.utils import no_init_or_tensor
@@ -14,15 +14,11 @@ from transformers import (
     StoppingCriteria,
     StoppingCriteriaList, AutoModelForCausalLM,
 )
+from subclass import YieldingCausalLM
 
-from config import DEFAULT_MODEL_NAME, load_tokenizer
+from config import load_tokenizer, load_model, format_prompt, maybe_download 
 
 CACHE_DIR = "pretrained_weights"
-
-TENSORIZER_WEIGHTS_PATH = "gs://replicate-weights/stablelm-tuned-alpha-7b.tensors"
-
-SYSTEM_PROMPT = """"""
-
 
 class StopOnTokens(StoppingCriteria):
     def __call__(
@@ -35,26 +31,11 @@ class StopOnTokens(StoppingCriteria):
         return False
 
 
-def maybe_download(path):
-    if path.startswith("gs://"):
-        output_path = "/tmp/weights.tensors"
-        subprocess.check_call(["gcloud", "storage", "cp", path, output_path])
-        return output_path
-    return path
-
-
 class Predictor(BasePredictor):
 
     # NB: change from the old version: weights now refers to the fine-tuned adaptor weights, and not the underlying model weights
     def setup(self, weights: Optional[Path] = None):
-        try:
-            print("Loading tensorized weights from public path")
-            self.model = self.load_tensorizer(
-                weights=maybe_download(TENSORIZER_WEIGHTS_PATH)
-            )
-        except:
-            print("Loading via hf")
-            self.model = self.load_huggingface_model()
+        self.model = load_model(plaid_mode=True, cls=YieldingCausalLM)
 
         self.tokenizer = load_tokenizer()
 
@@ -63,35 +44,16 @@ class Predictor(BasePredictor):
 
         self.stop = StopOnTokens()
 
-    def load_huggingface_model(self):
-        st = time.time()
-        print(f"loading weights w/o tensorizer")
-
-        model = AutoModelForCausalLM.from_pretrained(DEFAULT_MODEL_NAME, cache_dir=CACHE_DIR).to("cuda:0")
-        print(f"weights loaded in {time.time() - st}")
-        return model
-
-    def load_tensorizer(self, weights):
-        st = time.time()
-        print(f"deserializing weights from {weights}")
-        config = AutoConfig.from_pretrained(DEFAULT_MODEL_NAME)
-
-        model = no_init_or_tensor(
-            lambda: AutoModelForCausalLM.from_pretrained(
-                None, config=config, state_dict=OrderedDict()
-            )
-        )
-        des = TensorDeserializer(weights, plaid_mode=True)
-        des.load_into_module(model)
-        print(f"weights loaded in {time.time() - st}")
-        return model
-
     def load_fine_tuned(self, model, weights):
         """Load fine-tuned adaptor weights using PEFT."""
         st = time.time()
         print(f"loading fine-tuned weights from {weights}")
 
         weights = str(weights)
+        if weights.startswith("https:") or weights.startswith("gs:"):
+            local_path = '/src/output_weights.zip'
+            maybe_download(weights, local_path)
+            weights = local_path
 
         if weights.endswith(".zip"):
             import zipfile
@@ -133,15 +95,18 @@ class Predictor(BasePredictor):
             le=5,
             default=1.2,
         ),
-    ) -> str:
+    ) -> ConcatenateIterator[str]:
 
-        prompt_text = prompt
+        prompt_text = format_prompt(prompt)
+        print(f"prompt: {prompt_text}")
 
         input_ids = self.tokenizer(prompt_text, return_tensors="pt").input_ids.to(
             "cuda:0"
         )
         with torch.inference_mode():
-            output = self.model.generate(
+            first_token_yielded = False
+            prev_ids = []
+            for output in self.model.generate(
                 input_ids=input_ids,
                 max_new_tokens=max_tokens,
                 do_sample=True,
@@ -151,51 +116,34 @@ class Predictor(BasePredictor):
                 top_p=top_p,
                 repetition_penalty=repetition_penalty,
                 stopping_criteria=StoppingCriteriaList([self.stop]),
-            )
-
-            # detokenize
-            output = self.tokenizer.decode(output[0], skip_special_tokens=True)
-            return output
-        #     first_token_yielded = False
-        #     prev_ids = []
-        #     for output in self.model.generate(
-        #         input_ids,
-        #         max_new_tokens=max_tokens,
-        #         do_sample=True,
-        #         num_return_sequences=1,
-        #         num_beams=1,
-        #         temperature=temperature,
-        #         top_p=top_p,
-        #         repetition_penalty=repetition_penalty,
-        #         stopping_criteria=StoppingCriteriaList([self.stop]),
-        #     ):
-        #         cur_id = output.item()
-        #         # in order to properly handle spaces, we need to do our own tokenizing. Fun!
-        #         # we're building up a buffer of sub-word / punctuation tokens until we hit a space, and then yielding whole words + punctuation.
-        #         cur_token = self.tokenizer.convert_ids_to_tokens(cur_id)
-        #
-        #         # skip initial newline, which this almost always yields. hack - newline id = 187.
-        #         if not first_token_yielded and not prev_ids and cur_id == 187:
-        #             continue
-        #
-        #         # Space is represented as "Ġ".
-        #         # Yield previous IDs if we hit a space
-        #         # or if the current token includes a space
-        #         # at its start (e.g. ' is' -> 'Ġis')
-        #         if cur_token.startswith("Ġ"):
-        #             if prev_ids:
-        #                 yield self.tokenizer.decode(prev_ids)
-        #                 prev_ids = []
-        #
-        #             prev_ids = [cur_id]
-        #             continue
-        #
-        #         # End token
-        #         if cur_token == "<|endoftext|>":
-        #             break
-        #
-        #         prev_ids.append(cur_id)
-        #
-        #     if prev_ids:
-        #         yield self.tokenizer.decode(prev_ids)
-        #         prev_ids = []
+            ):
+                cur_id = output.item()
+                # in order to properly handle spaces, we need to do our own tokenizing. Fun!
+                # we're building up a buffer of sub-word / punctuation tokens until we hit a space, and then yielding whole words + punctuation.
+                cur_token = self.tokenizer.convert_ids_to_tokens(cur_id)
+        
+                # skip initial newline, which this almost always yields. hack - newline id = 187.
+                if not first_token_yielded and not prev_ids and cur_id == 187:
+                    continue
+        
+                # Space is represented as "Ġ".
+                # Yield previous IDs if we hit a space
+                # or if the current token includes a space
+                # at its start (e.g. ' is' -> 'Ġis')
+                if cur_token.startswith("Ġ"):
+                    if prev_ids:
+                        yield self.tokenizer.decode(prev_ids)
+                        prev_ids = []
+        
+                    prev_ids = [cur_id]
+                    continue
+        
+                # End token
+                if cur_token == "<|endoftext|>":
+                    break
+        
+                prev_ids.append(cur_id)
+        
+            if prev_ids:
+                yield self.tokenizer.decode(prev_ids)
+                prev_ids = []

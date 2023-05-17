@@ -11,9 +11,9 @@ from tensorizer import TensorDeserializer
 from tensorizer.utils import no_init_or_tensor
 from transformers import AutoModelForCausalLM, AutoTokenizer, AutoConfig
 
-DEFAULT_MODEL_NAME = "StabilityAI/stablelm-base-alpha-7b" #"StabilityAI/stablelm-base-alpha-3b"  # path from which we pull weights when there's no COG_WEIGHTS environment variable, + config
-TENSORIZER_WEIGHTS_PATH = "gs://replicate-weights/stablelm-base-alpha-7b-fp16.tensors"
-INSTRUCTION_TUNED = False
+DEFAULT_MODEL_NAME = "{{model_name}}" #"StabilityAI/stablelm-base-alpha-3b"  # path from which we pull weights when there's no COG_WEIGHTS environment variable, + config
+TENSORIZER_WEIGHTS_PATH = "{{tensorizer_weights}}"
+INSTRUCTION_TUNED = {{instruction_tuned}}
 LOCAL_PATH = f'''/src/{DEFAULT_MODEL_NAME.split("/")[-1].replace("-", "_")}.tensors'''
 
 TOKENIZER_PATH = DEFAULT_MODEL_NAME
@@ -119,3 +119,4 @@ def load_tensorizer(weights, plaid_mode=True, cls=AutoModelForCausalLM):
     des.load_into_module(model)
     print(f"weights loaded in {time.time() - st}")
     return model
+
